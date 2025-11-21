@@ -639,7 +639,14 @@ class DictToAttrRecursive(dict):
 
 def get_spepc(hps, filename, dtype, device, is_v2pro=False):
     sr1 = int(hps.data.sampling_rate)
-    audio, sr0 = torchaudio.load(filename)
+    # Use soundfile instead of torchaudio to avoid TorchCodec dependency
+    audio_np, sr0 = sf.read(filename)
+    audio = torch.from_numpy(audio_np).float()
+    # Reshape if stereo to (2, samples) format to match torchaudio output
+    if len(audio.shape) == 2 and audio.shape[1] == 2:
+        audio = audio.T
+    elif len(audio.shape) == 1:
+        audio = audio.unsqueeze(0)
     if sr0 != sr1:
         audio = audio.to(device)
         if audio.shape[0] == 2:
@@ -974,8 +981,14 @@ def get_tts_wav(
             phoneme_ids1 = torch.LongTensor(phones2).to(device).unsqueeze(0)
 
             fea_ref, ge = vq_model.decode_encp(prompt.unsqueeze(0), phoneme_ids0, refer)
-            ref_audio, sr = torchaudio.load(ref_wav_path)
-            ref_audio = ref_audio.to(device).float()
+            # Use soundfile instead of torchaudio to avoid TorchCodec dependency
+            ref_audio_np, sr = sf.read(ref_wav_path)
+            ref_audio = torch.from_numpy(ref_audio_np).float().to(device)
+            # Reshape if stereo to (2, samples) format
+            if len(ref_audio.shape) == 2 and ref_audio.shape[1] == 2:
+                ref_audio = ref_audio.T
+            elif len(ref_audio.shape) == 1:
+                ref_audio = ref_audio.unsqueeze(0)
             if ref_audio.shape[0] == 2:
                 ref_audio = ref_audio.mean(0).unsqueeze(0)
 
