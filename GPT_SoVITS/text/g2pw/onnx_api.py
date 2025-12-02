@@ -56,11 +56,33 @@ def predict(session, onnx_input: Dict[str, Any], labels: List[str]) -> Tuple[Lis
 
 
 def download_and_decompress(model_dir: str = "G2PWModel/"):
+    # FIX: Ensure absolute path based on this file's location
+    # This file is at: third_party/GPT-SoVITS/GPT_SoVITS/text/g2pw/onnx_api.py
+    # We want: third_party/GPT-SoVITS/GPT_SoVITS/text/G2PWModel/
+
+    if not os.path.isabs(model_dir):
+        # Get the directory containing this file (g2pw/)
+        g2pw_dir = os.path.dirname(os.path.abspath(__file__))
+        # Go up one level to text/
+        text_dir = os.path.dirname(g2pw_dir)
+        # Join with the model_dir basename (stripping any directory components)
+        model_basename = os.path.basename(model_dir.rstrip('/'))
+        model_dir = os.path.join(text_dir, model_basename)
+        print(f"DEBUG: Resolved model path to: {model_dir}")
+
+    print(f"DEBUG: Checking if model exists at: {model_dir}")
+
     if not os.path.exists(model_dir):
+        # Use model_dir directly as it's now absolute
         parent_directory = os.path.dirname(model_dir)
         zip_dir = os.path.join(parent_directory, "G2PWModel_1.1.zip")
         extract_dir = os.path.join(parent_directory, "G2PWModel_1.1")
         extract_dir_new = os.path.join(parent_directory, "G2PWModel")
+
+        # Skip download if model files already exist
+        if os.path.exists(extract_dir_new):
+            return model_dir
+
         print("Downloading g2pw model...")
         modelscope_url = "https://www.modelscope.cn/models/kamiorinn/g2pw/resolve/master/G2PWModel_1.1.zip"  # "https://paddlespeech.cdn.bcebos.com/Parakeet/released_models/g2p/G2PWModel_1.1.zip"
         with requests.get(modelscope_url, stream=True) as r:
@@ -109,6 +131,18 @@ class G2PWOnnxConverter:
 
         self.model_source = model_source if model_source else self.config.model_source
         self.enable_opencc = enable_non_tradional_chinese
+
+        # FIX: Convert relative model_source path to absolute path
+        # If model_source is a relative path like "GPT_SoVITS/pretrained_models/...",
+        # convert it to absolute path based on GPT-SoVITS base directory
+        if self.model_source and not os.path.isabs(self.model_source):
+            # Get GPT-SoVITS base directory (go up from GPT_SoVITS/text/g2pw/ to GPT-SoVITS/)
+            g2pw_dir = os.path.dirname(os.path.abspath(__file__))  # .../GPT_SoVITS/text/g2pw/
+            text_dir = os.path.dirname(g2pw_dir)  # .../GPT_SoVITS/text/
+            gptsovits_module_dir = os.path.dirname(text_dir)  # .../GPT_SoVITS/
+            gptsovits_base_dir = os.path.dirname(gptsovits_module_dir)  # .../GPT-SoVITS/ (repo root)
+            self.model_source = os.path.join(gptsovits_base_dir, self.model_source)
+            print(f"DEBUG: Resolved model_source to absolute path: {self.model_source}")
 
         self.tokenizer = AutoTokenizer.from_pretrained(self.model_source)
 
